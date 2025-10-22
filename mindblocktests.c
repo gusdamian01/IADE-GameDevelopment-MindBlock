@@ -10,6 +10,8 @@
 // Tile codes
 #define TILE_WALL 'W'
 #define TILE_FLOOR 'F'
+#define TILE_PUZZLE 'P'
+#define TILE_MATH 'M'
 
 // ====================== STRUCTURES ======================
 struct Player {
@@ -87,14 +89,14 @@ int main(void) {
             struct Piece *p = findPieceById(player.controlledPieceId);
             if (!p) continue;
 
-            if (input == 'Q' || input == 'q') {
+            if (input == 'Q') {
                 player.controllingPiece = false;
                 player.controlledPieceId = '\0';
                 player.position_x = p->baseX;
                 player.position_y = p->baseY;
                 printf("You placed the piece and returned to wizard form.\n");
             } 
-            else if (input == 'R' || input == 'r') {
+            else if (input == 'R') {
                 removePieceFromMap(p);
                 rotatePiece(p);
                 if (!canPlace(p)) { // undo if invalid
@@ -104,10 +106,10 @@ int main(void) {
             }
             else {
                 int dx = 0, dy = 0;
-                if (input == 'W' || input == 'w') dx = -1;
-                else if (input == 'S' || input == 's') dx = 1;
-                else if (input == 'A' || input == 'a') dy = -1;
-                else if (input == 'D' || input == 'd') dy = 1;
+                if (input == 'W') dx = -1;
+                else if (input == 'S') dx = 1;
+                else if (input == 'A') dy = -1;
+                else if (input == 'D') dy = 1;
 
                 if (canMovePiece(p, dx, dy)) {
                     removePieceFromMap(p);
@@ -250,15 +252,15 @@ void initPieces(void) {
     pieces[numPieces++] = line;
 
     // C - L shape
-    struct Piece lshape = {'C', 4, {{0,0},{1,0},{2,0},{2,1}}, 2, 7, true};
+    struct Piece lshape = {'C', 4, {{0,0},{1,0},{2,0},{2,1}}, 2, 15, true};
     pieces[numPieces++] = lshape;
 
     // D - T shape
-    struct Piece tshape = {'D', 4, {{0,1},{1,0},{1,1},{1,2}}, 5, 7, true};
+    struct Piece tshape = {'D', 4, {{0,1},{1,0},{1,1},{1,2}}, 8, 3, true};
     pieces[numPieces++] = tshape;
 
     // E - S shape
-    struct Piece sshape = {'E', 4, {{0,1},{0,2},{1,0},{1,1}}, 8, 4, true};
+    struct Piece sshape = {'E', 4, {{0,1},{0,2},{1,0},{1,1}}, 8, 15, true};
     pieces[numPieces++] = sshape;
 
     // Place all pieces
