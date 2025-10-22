@@ -2,9 +2,9 @@
 #include <stdbool.h>
 
 // ====================== CONFIGURATIONS ======================
-#define MAP_ROWS 12 
+#define MAP_ROWS 12
 #define MAP_COLS 20
-#define MAX_PIECES 10
+#define MAX_PIECES 5
 
 // Tile codes
 #define TILE_WALL 'W'
@@ -12,19 +12,22 @@
 
 // ====================== STRUCTURES ======================
 struct Player {
+    int level;
+    int attack;
     int position_x;
     int position_y;
-    bool controllingPiece;
-    char controlledPieceId;
+    int defense;
+    bool holdingPiece;
+    char heldPieceId;
 };
 
 struct Piece {
-    char id;              
-    int size;             
-    int tiles[4][2];      
+    char id;              // e.g. 'A', 'B', etc.
+    int size;             // number of tiles (4)
+    int tiles[4][2];      // relative coordinates
+    bool placed;
     int baseX;
     int baseY;
-    bool placed;
 };
 
 // ====================== GLOBALS ======================
@@ -40,86 +43,92 @@ char map[MAP_ROWS][MAP_COLS] = {
     {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
     {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
     {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W'},
+    {'W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W'}
 };
 
-struct Player player = {5, 5, false, '\0'};
+struct Player player = {1, 5, 5, 3, 3, false, '\0'};
 struct Piece pieces[MAX_PIECES];
 int numPieces = 0;
 
 // ====================== FUNCTION DECLARATIONS ======================
 void printMap(void);
+void printPlayerStats(void);
 char readUserInput(void);
-
-bool inBounds(int y, int x);
-bool canMovePiece(struct Piece *p, int dx, int dy);
-
-void movePiece(struct Piece *p, int dx, int dy);
 void movePlayer(char dir);
-void placePieceOnMap(struct Piece *p);
+bool isTileWalkable(char t);
+bool inBounds(int y, int x);
+
+void placePieceOnMap(struct Piece *p, int baseX, int baseY);
 void removePieceFromMap(struct Piece *p);
 void initPieces(void);
 void interact(void);
-
-struct Piece* findPieceById(char id);
-bool canPlace(struct Piece *p);
-
 void rotatePiece(struct Piece *p);
+bool canMovePiece(struct Piece *p, int dx, int dy);
+bool canPlace(struct Piece *p);
 
 // ====================== MAIN ======================
 int main(void) {
-    printf("Hello Wizard! 🧙\n\n");
+    printf("Hello Joe! 😁\n\n");
 
     initPieces();
 
     while (1) {
+        printPlayerStats();    
         printMap();
 
-        if (player.controllingPiece)
-            printf("🧩 You are moving piece %c. (WASD move, R rotate, Q place)\n> ", player.controlledPieceId);
-        else
-            printf("🧙 You are the wizard. (WASD move, E control piece)\n> ");
-
+        printf("\nUse W/A/S/D to move, E or Q to pick up/place, R to rotate.\n> ");
         char input = readUserInput();
 
-        if (player.controllingPiece) {
-            struct Piece *p = findPieceById(player.controlledPieceId);
-            if (!p) continue;
+        if (input == 'E' || input == 'e') interact();
+        else if (input == 'Q' || input == 'q') interact();
+        else if (input == 'R' || input == 'r') {
+            if (player.holdingPiece) {
+                for (int i = 0; i < numPieces; i++) {
+                    if (pieces[i].id == player.heldPieceId) {
+                        struct Piece *p = &pieces[i];
 
-            if (input == 'Q' || input == 'q') {
-                player.controllingPiece = false;
-                player.controlledPieceId = '\0';
-                player.position_x = p->baseX;
-                player.position_y = p->baseY;
-                printf("You placed the piece and returned to wizard form.\n");
-            } 
-            else if (input == 'R' || input == 'r') {
-                removePieceFromMap(p);
-                rotatePiece(p);
-                if (!canPlace(p)) { // undo if invalid
-                    for (int i = 0; i < 3; i++) rotatePiece(p);
-                }
-                placePieceOnMap(p);
-            }
-            else {
-                int dx = 0, dy = 0;
-                if (input == 'W' || input == 'w') dx = -1;
-                else if (input == 'S' || input == 's') dx = 1;
-                else if (input == 'A' || input == 'a') dy = -1;
-                else if (input == 'D' || input == 'd') dy = 1;
+                        // Rotation safety check
+                        removePieceFromMap(p);
 
-                if (canMovePiece(p, dx, dy)) {
-                    removePieceFromMap(p);
-                    movePiece(p, dx, dy);
-                    placePieceOnMap(p);
+                        int backup[4][2];
+                        for (int j = 0; j < 4; j++) {
+                            backup[j][0] = p->tiles[j][0];
+                            backup[j][1] = p->tiles[j][1];
+                        }
+
+                        rotatePiece(p);
+                        if (!canPlace(p)) {
+                            // Undo rotation if invalid
+                            for (int j = 0; j < 4; j++) {
+                                p->tiles[j][0] = backup[j][0];
+                                p->tiles[j][1] = backup[j][1];
+                            }
+                        }
+                        placePieceOnMap(p, p->baseX, p->baseY);
+                    }
                 }
             }
-        } 
-        else {
-            if (input == 'E' || input == 'e') interact();
-            else movePlayer(input);
         }
+        else if (player.holdingPiece) {
+            for (int i = 0; i < numPieces; i++) {
+                if (pieces[i].id == player.heldPieceId) {
+                    struct Piece *p = &pieces[i];
+                    int dx = 0, dy = 0;
+                    if (input == 'W' || input == 'w') dx = -1;
+                    else if (input == 'S' || input == 's') dx = 1;
+                    else if (input == 'A' || input == 'a') dy = -1;
+                    else if (input == 'D' || input == 'd') dy = 1;
+
+                    if (canMovePiece(p, dx, dy)) {
+                        removePieceFromMap(p);
+                        p->baseX += dx;
+                        p->baseY += dy;
+                        placePieceOnMap(p, p->baseX, p->baseY);
+                    }
+                }
+            }
+        }
+        else movePlayer(input);
 
         printf("\n\n");
     }
@@ -129,17 +138,30 @@ int main(void) {
 
 // ====================== IMPLEMENTATIONS ======================
 
+void printPlayerStats() {
+    printf("📍 Position: [%d,%d]\n", player.position_x, player.position_y);
+    if (player.holdingPiece)
+        printf("🧩 Controlling piece: %c\n", player.heldPieceId);
+    else
+        printf("😁 Joe ready to move.\n");
+}
+
 void printMap(void) {
     for (int x = 0; x < MAP_ROWS; x++) {
         for (int y = 0; y < MAP_COLS; y++) {
-            if (!player.controllingPiece && x == player.position_x && y == player.position_y)
+            if (!player.holdingPiece && x == player.position_x && y == player.position_y)
                 printf("😁");
             else if (map[x][y] == 'W')
                 printf("🟥");
             else if (map[x][y] == 'F')
                 printf("⬜");
-            else if (map[x][y] >= 'A' && map[x][y] <= 'Z')
-                printf("🔷");
+            else if (map[x][y] >= 'A' && map[x][y] <= 'Z') {
+                if (player.holdingPiece && map[x][y] == player.heldPieceId)
+                    printf("🟦"); // active piece
+                else
+                    printf("🔷");
+            } else
+                printf("%c", map[x][y]);
         }
         printf("\n");
     }
@@ -147,8 +169,15 @@ void printMap(void) {
 
 char readUserInput(void) {
     char input;
-    scanf(" %c", &input);
+    scanf(" %c", &input); // space before %c skips whitespace
     return input;
+}
+
+bool isTileWalkable(char t) {
+    if (t == TILE_FLOOR) return true;
+    // allow wizard to step on a piece tile if not controlling a piece
+    if (!player.holdingPiece && t >= 'A' && t <= 'Z') return true;
+    return false;
 }
 
 bool inBounds(int y, int x) {
@@ -167,45 +196,52 @@ void movePlayer(char dir) {
         default: return;
     }
 
-    if (!inBounds(newX, newY)) return;
-    if (map[newX][newY] == 'W') return;
-
-    player.position_x = newX;
-    player.position_y = newY;
-}
-
-void interact(void) {
-    char tile = map[player.position_x][player.position_y];
-    if (tile >= 'A' && tile <= 'Z') {
-        player.controllingPiece = true;
-        player.controlledPieceId = tile;
-        printf("You are now controlling piece %c!\n", tile);
+    if (inBounds(newX, newY) && isTileWalkable(map[newX][newY])) {
+        player.position_x = newX;
+        player.position_y = newY;
     }
 }
 
-struct Piece* findPieceById(char id) {
-    for (int i = 0; i < numPieces; i++) {
-        if (pieces[i].id == id) return &pieces[i];
-    }
-    return NULL;
-}
+// ====================== PIECE SYSTEM ======================
 
-// =============== PIECE SYSTEM ===============
-
-void placePieceOnMap(struct Piece *p) {
+void placePieceOnMap(struct Piece *p, int baseX, int baseY) {
     for (int i = 0; i < p->size; i++) {
-        int x = p->baseX + p->tiles[i][0];
-        int y = p->baseY + p->tiles[i][1];
-        if (inBounds(x, y)) map[x][y] = p->id;
+        int x = baseX + p->tiles[i][0];
+        int y = baseY + p->tiles[i][1];
+        if (inBounds(x, y))
+            map[x][y] = p->id;
     }
+    p->baseX = baseX;
+    p->baseY = baseY;
+    p->placed = true;
 }
 
 void removePieceFromMap(struct Piece *p) {
     for (int i = 0; i < p->size; i++) {
         int x = p->baseX + p->tiles[i][0];
         int y = p->baseY + p->tiles[i][1];
-        if (inBounds(x, y)) map[x][y] = TILE_FLOOR;
+        if (inBounds(x, y) && map[x][y] == p->id)
+            map[x][y] = TILE_FLOOR;
     }
+}
+
+bool canMovePiece(struct Piece *p, int dx, int dy) {
+    for (int i = 0; i < p->size; i++) {
+        int newX = p->baseX + p->tiles[i][0] + dx;
+        int newY = p->baseY + p->tiles[i][1] + dy;
+
+        if (!inBounds(newX, newY)) return false;
+
+        char tile = map[newX][newY];
+        bool isOwnTile = false;
+        for (int j = 0; j < p->size; j++) {
+            int oldX = p->baseX + p->tiles[j][0];
+            int oldY = p->baseY + p->tiles[j][1];
+            if (oldX == newX && oldY == newY) { isOwnTile = true; break; }
+        }
+        if (!isOwnTile && tile != TILE_FLOOR) return false;
+    }
+    return true;
 }
 
 bool canPlace(struct Piece *p) {
@@ -213,56 +249,64 @@ bool canPlace(struct Piece *p) {
         int x = p->baseX + p->tiles[i][0];
         int y = p->baseY + p->tiles[i][1];
         if (!inBounds(x, y)) return false;
-        if (map[x][y] == 'W') return false;
+        char tile = map[x][y];
+        bool isOwnTile = false;
+        for (int j = 0; j < p->size; j++) {
+            int oldX = p->baseX + p->tiles[j][0];
+            int oldY = p->baseY + p->tiles[j][1];
+            if (oldX == x && oldY == y) { isOwnTile = true; break; }
+        }
+        if (!isOwnTile && tile != TILE_FLOOR) return false;
     }
     return true;
-}
-
-bool canMovePiece(struct Piece *p, int dx, int dy) {
-    for (int i = 0; i < p->size; i++) {
-        int newX = p->baseX + p->tiles[i][0] + dx;
-        int newY = p->baseY + p->tiles[i][1] + dy;
-        if (!inBounds(newX, newY)) return false;
-        if (map[newX][newY] == 'W') return false;
-    }
-    return true;
-}
-
-void movePiece(struct Piece *p, int dx, int dy) {
-    p->baseX += dx;
-    p->baseY += dy;
 }
 
 void rotatePiece(struct Piece *p) {
     for (int i = 0; i < p->size; i++) {
-        int x = p->tiles[i][0];
-        int y = p->tiles[i][1];
-        p->tiles[i][0] = y;
-        p->tiles[i][1] = -x;
+        int temp = p->tiles[i][0];
+        p->tiles[i][0] = p->tiles[i][1];
+        p->tiles[i][1] = -temp;
     }
 }
 
 void initPieces(void) {
-    // A - Square (O)
-    struct Piece square = {'A', 4, {{0,0},{0,1},{1,0},{1,1}}, 3, 3, true};
+    // Square (A)
+    struct Piece square = {'A', 4, {{0,0},{0,1},{1,0},{1,1}}, true, 2, 2};
     pieces[numPieces++] = square;
+    placePieceOnMap(&pieces[0], 2, 2);
 
-    // B - Line (I)
-    struct Piece line = {'B', 4, {{0,0},{0,1},{0,2},{0,3}}, 6, 3, true};
+    // Line (B)
+    struct Piece line = {'B', 4, {{0,0},{1,0},{2,0},{3,0}}, true, 2, 6};
     pieces[numPieces++] = line;
+    placePieceOnMap(&pieces[1], 2, 6);
 
-    // C - L shape
-    struct Piece lshape = {'C', 4, {{0,0},{1,0},{2,0},{2,1}}, 2, 7, true};
-    pieces[numPieces++] = lshape;
+    // T-shape (C)
+    struct Piece tee = {'C', 4, {{0,0},{0,1},{0,2},{1,1}}, true, 6, 3};
+    pieces[numPieces++] = tee;
+    placePieceOnMap(&pieces[2], 6, 3);
 
-    // D - T shape
-    struct Piece tshape = {'D', 4, {{0,1},{1,0},{1,1},{1,2}}, 5, 7, true};
-    pieces[numPieces++] = tshape;
+    // L-shape (D)
+    struct Piece ell = {'D', 4, {{0,0},{1,0},{2,0},{2,1}}, true, 7, 8};
+    pieces[numPieces++] = ell;
+    placePieceOnMap(&pieces[3], 7, 8);
 
-    // E - S shape
-    struct Piece sshape = {'E', 4, {{0,1},{0,2},{1,0},{1,1}}, 8, 4, true};
-    pieces[numPieces++] = sshape;
+    // Z-shape (E)
+    struct Piece zee = {'E', 4, {{0,0},{0,1},{1,1},{1,2}}, true, 4, 5};
+    pieces[numPieces++] = zee;
+    placePieceOnMap(&pieces[4], 4, 5);
+}
 
-    // Place all pieces
-    for (int i = 0; i < numPieces; i++) placePieceOnMap(&pieces[i]);
+void interact(void) {
+    if (!player.holdingPiece) {
+        char tile = map[player.position_x][player.position_y];
+        if (tile >= 'A' && tile <= 'Z') {
+            player.holdingPiece = true;
+            player.heldPieceId = tile;
+            printf("You are now controlling piece %c!\n", tile);
+        }
+    } else {
+        player.holdingPiece = false;
+        player.heldPieceId = '\0';
+        printf("You return to wizard form.\n");
+    }
 }
