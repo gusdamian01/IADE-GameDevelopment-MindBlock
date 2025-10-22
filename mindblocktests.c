@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <stdlib.h>
+#include <time.h>
 
 // ====================== CONFIGURATIONS ======================
 #define MAP_ROWS 12 
@@ -12,6 +14,11 @@
 #define TILE_FLOOR 'F'
 #define TILE_PUZZLE 'P'
 #define TILE_MATH 'M'
+
+// Piece color emojis
+static const char* PIECE_EMOJI[7] = {
+    "🟥","🟦","🟨","🟩","🟪","🟧","🟫"
+};
 
 // ====================== STRUCTURES ======================
 struct Player {
@@ -28,6 +35,7 @@ struct Piece {
     int baseX;
     int baseY;
     bool placed;
+    int color;            // 0–6 index into PIECE_EMOJI
 };
 
 // ====================== GLOBALS ======================
@@ -66,8 +74,10 @@ void interact(void);
 
 struct Piece* findPieceById(char id);
 bool canPlace(struct Piece *p);
-
 void rotatePiece(struct Piece *p);
+
+// Helper to get piece color emoji
+static const char* emoji_for_piece_id(char id);
 
 // ====================== MAIN ======================
 int main(void) {
@@ -137,11 +147,11 @@ void printMap(void) {
             if (!player.controllingPiece && x == player.position_x && y == player.position_y)
                 printf("😁");
             else if (map[x][y] == 'W')
-                printf("🟥");
+                printf("⬛");
             else if (map[x][y] == 'F')
                 printf("⬜");
             else if (map[x][y] >= 'A' && map[x][y] <= 'Z')
-                printf("🔷");
+                printf("%s", emoji_for_piece_id(map[x][y]));
         }
         printf("\n");
     }
@@ -150,7 +160,7 @@ void printMap(void) {
 char readUserInput(void) {
     char input;
     scanf(" %c", &input);
-    return toupper(input);
+    return (char)toupper((unsigned char)input);
 }
 
 bool inBounds(int y, int x) {
@@ -188,6 +198,12 @@ struct Piece* findPieceById(char id) {
         if (pieces[i].id == id) return &pieces[i];
     }
     return NULL;
+}
+
+static const char* emoji_for_piece_id(char id) {
+    struct Piece* p = findPieceById(id);
+    if (!p) return "❓";
+    return PIECE_EMOJI[p->color % 7];
 }
 
 // =============== PIECE SYSTEM ===============
@@ -237,31 +253,35 @@ void rotatePiece(struct Piece *p) {
     for (int i = 0; i < p->size; i++) {
         int x = p->tiles[i][0];
         int y = p->tiles[i][1];
+        // 90° rotation clockwise
         p->tiles[i][0] = y;
         p->tiles[i][1] = -x;
     }
 }
 
 void initPieces(void) {
-    // A - Square (O)
-    struct Piece square = {'A', 4, {{0,0},{0,1},{1,0},{1,1}}, 3, 3, true};
+    srand((unsigned)time(NULL));
+
+    // Define your pieces
+    struct Piece square = {'A', 4, {{0,0},{0,1},{1,0},{1,1}}, 3, 3, true, 0};
     pieces[numPieces++] = square;
 
-    // B - Line (I)
-    struct Piece line = {'B', 4, {{0,0},{0,1},{0,2},{0,3}}, 6, 3, true};
+    struct Piece line = {'B', 4, {{0,0},{0,1},{0,2},{0,3}}, 6, 3, true, 0};
     pieces[numPieces++] = line;
 
-    // C - L shape
-    struct Piece lshape = {'C', 4, {{0,0},{1,0},{2,0},{2,1}}, 2, 15, true};
+    struct Piece lshape = {'C', 4, {{0,0},{1,0},{2,0},{2,1}}, 2, 15, true, 0};
     pieces[numPieces++] = lshape;
 
-    // D - T shape
-    struct Piece tshape = {'D', 4, {{0,1},{1,0},{1,1},{1,2}}, 8, 3, true};
+    struct Piece tshape = {'D', 4, {{0,1},{1,0},{1,1},{1,2}}, 8, 3, true, 0};
     pieces[numPieces++] = tshape;
 
-    // E - S shape
-    struct Piece sshape = {'E', 4, {{0,1},{0,2},{1,0},{1,1}}, 8, 15, true};
+    struct Piece sshape = {'E', 4, {{0,1},{0,2},{1,0},{1,1}}, 8, 15, true, 0};
     pieces[numPieces++] = sshape;
+
+    // Random colors for each piece
+    for (int i = 0; i < numPieces; i++) {
+        pieces[i].color = rand() % 7;
+    }
 
     // Place all pieces
     for (int i = 0; i < numPieces; i++) placePieceOnMap(&pieces[i]);
