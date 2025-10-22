@@ -2,8 +2,8 @@
 #include <stdbool.h>
 
 // ====================== CONFIGURATIONS ======================
-#define MAP_ROWS 12
-#define MAP_COLS 12
+#define MAP_ROWS 12 
+#define MAP_COLS 20
 #define MAX_PIECES 10
 
 // Tile codes
@@ -29,18 +29,19 @@ struct Piece {
 
 // ====================== GLOBALS ======================
 char map[MAP_ROWS][MAP_COLS] = {
-    {'W','W','W','W','W','W','W','W','W','W','W','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','W','W','W','W','W','W','W','W','W','W','W'}
+    {'W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W'},
+    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
+    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
+    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
+    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
+    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
+    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
+    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
+    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
+    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
+    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
+    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
+    {'W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W'},
 };
 
 struct Player player = {5, 5, false, '\0'};
@@ -50,16 +51,20 @@ int numPieces = 0;
 // ====================== FUNCTION DECLARATIONS ======================
 void printMap(void);
 char readUserInput(void);
+
 bool inBounds(int y, int x);
 bool canMovePiece(struct Piece *p, int dx, int dy);
+
 void movePiece(struct Piece *p, int dx, int dy);
 void movePlayer(char dir);
 void placePieceOnMap(struct Piece *p);
 void removePieceFromMap(struct Piece *p);
 void initPieces(void);
 void interact(void);
+
 struct Piece* findPieceById(char id);
 bool canPlace(struct Piece *p);
+
 void rotatePiece(struct Piece *p);
 
 // ====================== MAIN ======================
