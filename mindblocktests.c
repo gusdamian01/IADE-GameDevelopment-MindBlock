@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdbool.h>
+#include <ctype.h>
 
 // ====================== CONFIGURATIONS ======================
 #define MAP_ROWS 12 
@@ -30,7 +31,6 @@ struct Piece {
 // ====================== GLOBALS ======================
 char map[MAP_ROWS][MAP_COLS] = {
     {'W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
     {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
     {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
     {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
@@ -148,7 +148,7 @@ void printMap(void) {
 char readUserInput(void) {
     char input;
     scanf(" %c", &input);
-    return input;
+    return toupper(input);
 }
 
 bool inBounds(int y, int x) {
@@ -159,13 +159,11 @@ void movePlayer(char dir) {
     int newX = player.position_x;
     int newY = player.position_y;
 
-    switch (dir) {
-        case 'A': case 'a': newY--; break;
-        case 'D': case 'd': newY++; break;
-        case 'W': case 'w': newX--; break;
-        case 'S': case 's': newX++; break;
-        default: return;
-    }
+    if (dir == 'W') newX--;
+    else if (dir == 'S') newX++;
+    else if (dir == 'A') newY--;
+    else if (dir == 'D') newY++;
+    else return;
 
     if (!inBounds(newX, newY)) return;
     if (map[newX][newY] == 'W') return;
