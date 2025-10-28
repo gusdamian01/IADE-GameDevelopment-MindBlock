@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-// ====================== CONFIGURATIONS ======================
+// === CONFIGURATIONS
 #define MAP_ROWS 12 
 #define MAP_COLS 20
 #define MAX_PIECES 10
@@ -20,7 +20,7 @@ static const char* PIECE_EMOJI[7] = {
     "🟥","🟦","🟨","🟩","🟪","🟧","🟫"
 };
 
-// ====================== STRUCTURES ======================
+// === STRUCTURES
 struct Player {
     int position_x;
     int position_y;
@@ -38,7 +38,7 @@ struct Piece {
     int color;            // 0–6 index into PIECE_EMOJI
 };
 
-// ====================== GLOBALS ======================
+// === GLOBALS
 char map[MAP_ROWS][MAP_COLS] = {
     {'W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W'},
     {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
@@ -58,30 +58,30 @@ struct Player player = {5, 5, false, '\0'};
 struct Piece pieces[MAX_PIECES];
 int numPieces = 0;
 
-// ====================== FUNCTION DECLARATIONS ======================
+// === FUNCTION DECLARATIONS
 void printMap(void);
 char readUserInput(void);
 
 bool inBounds(int y, int x);
-bool canMovePiece(struct Piece *p, int dx, int dy);
+bool canMovePiece(int index, int dx, int dy);
 
-void movePiece(struct Piece *p, int dx, int dy);
+void movePiece(int index, int dx, int dy);
 void movePlayer(char dir);
-void placePieceOnMap(struct Piece *p);
-void removePieceFromMap(struct Piece *p);
+void placePieceOnMap(int index);
+void removePieceFromMap(int index);
 void initPieces(void);
 void interact(void);
 
-struct Piece* findPieceById(char id);
-bool canPlace(struct Piece *p);
-void rotatePiece(struct Piece *p);
+int findPieceIndexById(char id);
+bool canPlace(int index);
+void rotatePiece(int index);
 
 // Helper to get piece color emoji
 static const char* emoji_for_piece_id(char id);
 
-// ====================== MAIN ======================
+// === MAIN
 int main(void) {
-    printf("Hello Wizard! 🧙\n\n");
+    printf("Hello Joe! 😁\n\n");
 
     initPieces();
 
@@ -91,28 +91,28 @@ int main(void) {
         if (player.controllingPiece)
             printf("🧩 You are moving piece %c. (WASD move, R rotate, Q place)\n> ", player.controlledPieceId);
         else
-            printf("🧙 You are the wizard. (WASD move, E control piece)\n> ");
+            printf("😁 You are Joe. (WASD move, E control piece)\n> ");
 
         char input = readUserInput();
 
         if (player.controllingPiece) {
-            struct Piece *p = findPieceById(player.controlledPieceId);
-            if (!p) continue;
+            int index = findPieceIndexById(player.controlledPieceId);
+            if (index == -1) continue;
 
             if (input == 'Q') {
                 player.controllingPiece = false;
                 player.controlledPieceId = '\0';
-                player.position_x = p->baseX;
-                player.position_y = p->baseY;
-                printf("You placed the piece and returned to wizard form.\n");
+                player.position_x = pieces[index].baseX;
+                player.position_y = pieces[index].baseY;
+                printf("You placed the piece and returned to Joe form.\n");
             } 
             else if (input == 'R') {
-                removePieceFromMap(p);
-                rotatePiece(p);
-                if (!canPlace(p)) { // undo if invalid
-                    for (int i = 0; i < 3; i++) rotatePiece(p);
+                removePieceFromMap(index);
+                rotatePiece(index);
+                if (!canPlace(index)) {
+                    for (int i = 0; i < 3; i++) rotatePiece(index);
                 }
-                placePieceOnMap(p);
+                placePieceOnMap(index);
             }
             else {
                 int dx = 0, dy = 0;
@@ -121,15 +121,15 @@ int main(void) {
                 else if (input == 'A') dy = -1;
                 else if (input == 'D') dy = 1;
 
-                if (canMovePiece(p, dx, dy)) {
-                    removePieceFromMap(p);
-                    movePiece(p, dx, dy);
-                    placePieceOnMap(p);
+                if (canMovePiece(index, dx, dy)) {
+                    removePieceFromMap(index);
+                    movePiece(index, dx, dy);
+                    placePieceOnMap(index);
                 }
             }
         } 
         else {
-            if (input == 'E' || input == 'e') interact();
+            if (input == 'E' || input == 'e' ) interact();
             else movePlayer(input);
         }
 
@@ -139,7 +139,7 @@ int main(void) {
     return 0;
 }
 
-// ====================== IMPLEMENTATIONS ======================
+// === IMPLEMENTATIONS
 
 void printMap(void) {
     for (int x = 0; x < MAP_ROWS; x++) {
@@ -193,76 +193,78 @@ void interact(void) {
     }
 }
 
-struct Piece* findPieceById(char id) {
+int findPieceIndexById(char id) {
     for (int i = 0; i < numPieces; i++) {
-        if (pieces[i].id == id) return &pieces[i];
+        if (pieces[i].id == id) return i;
     }
-    return NULL;
+    return -1;
 }
 
 static const char* emoji_for_piece_id(char id) {
-    struct Piece* p = findPieceById(id);
-    if (!p) return "❓";
-    return PIECE_EMOJI[p->color % 7];
+    int index = findPieceIndexById(id);
+    if (index == -1) return "❓";
+    return PIECE_EMOJI[pieces[index].color % 7];
 }
 
-// =============== PIECE SYSTEM ===============
+// === PIECE SYSTEM
 
-void placePieceOnMap(struct Piece *p) {
-    for (int i = 0; i < p->size; i++) {
-        int x = p->baseX + p->tiles[i][0];
-        int y = p->baseY + p->tiles[i][1];
-        if (inBounds(x, y)) map[x][y] = p->id;
+void placePieceOnMap(int index) {
+    struct Piece piece = pieces[index];
+    for (int i = 0; i < piece.size; i++) {
+        int x = piece.baseX + piece.tiles[i][0];
+        int y = piece.baseY + piece.tiles[i][1];
+        if (inBounds(x, y)) map[x][y] = piece.id;
     }
 }
 
-void removePieceFromMap(struct Piece *p) {
-    for (int i = 0; i < p->size; i++) {
-        int x = p->baseX + p->tiles[i][0];
-        int y = p->baseY + p->tiles[i][1];
+void removePieceFromMap(int index) {
+    struct Piece piece = pieces[index];
+    for (int i = 0; i < piece.size; i++) {
+        int x = piece.baseX + piece.tiles[i][0];
+        int y = piece.baseY + piece.tiles[i][1];
         if (inBounds(x, y)) map[x][y] = TILE_FLOOR;
     }
 }
 
-bool canPlace(struct Piece *p) {
-    for (int i = 0; i < p->size; i++) {
-        int x = p->baseX + p->tiles[i][0];
-        int y = p->baseY + p->tiles[i][1];
+bool canPlace(int index) {
+    struct Piece piece = pieces[index];
+    for (int i = 0; i < piece.size; i++) {
+        int x = piece.baseX + piece.tiles[i][0];
+        int y = piece.baseY + piece.tiles[i][1];
         if (!inBounds(x, y)) return false;
         if (map[x][y] == 'W') return false;
     }
     return true;
 }
 
-bool canMovePiece(struct Piece *p, int dx, int dy) {
-    for (int i = 0; i < p->size; i++) {
-        int newX = p->baseX + p->tiles[i][0] + dx;
-        int newY = p->baseY + p->tiles[i][1] + dy;
+bool canMovePiece(int index, int dx, int dy) {
+    struct Piece piece = pieces[index];
+    for (int i = 0; i < piece.size; i++) {
+        int newX = piece.baseX + piece.tiles[i][0] + dx;
+        int newY = piece.baseY + piece.tiles[i][1] + dy;
         if (!inBounds(newX, newY)) return false;
         if (map[newX][newY] == 'W') return false;
     }
     return true;
 }
 
-void movePiece(struct Piece *p, int dx, int dy) {
-    p->baseX += dx;
-    p->baseY += dy;
+void movePiece(int index, int dx, int dy) {
+    pieces[index].baseX += dx;
+    pieces[index].baseY += dy;
 }
 
-void rotatePiece(struct Piece *p) {
-    for (int i = 0; i < p->size; i++) {
-        int x = p->tiles[i][0];
-        int y = p->tiles[i][1];
-        // 90° rotation clockwise
-        p->tiles[i][0] = y;
-        p->tiles[i][1] = -x;
+void rotatePiece(int index) {
+    for (int i = 0; i < pieces[index].size; i++) {
+        int x = pieces[index].tiles[i][0];
+        int y = pieces[index].tiles[i][1];
+        pieces[index].tiles[i][0] = y;
+        pieces[index].tiles[i][1] = -x;
     }
 }
 
 void initPieces(void) {
     srand((unsigned)time(NULL));
 
-    // Define your pieces
     struct Piece square = {'A', 4, {{0,0},{0,1},{1,0},{1,1}}, 3, 3, true, 0};
     pieces[numPieces++] = square;
 
@@ -278,11 +280,9 @@ void initPieces(void) {
     struct Piece sshape = {'E', 4, {{0,1},{0,2},{1,0},{1,1}}, 8, 15, true, 0};
     pieces[numPieces++] = sshape;
 
-    // Random colors for each piece
     for (int i = 0; i < numPieces; i++) {
         pieces[i].color = rand() % 7;
     }
 
-    // Place all pieces
-    for (int i = 0; i < numPieces; i++) placePieceOnMap(&pieces[i]);
+    for (int i = 0; i < numPieces; i++) placePieceOnMap(i);
 }
