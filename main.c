@@ -4,9 +4,9 @@
 #include <stdlib.h>
 #include <time.h>
 
-// === CONFIGURATIONS ===
+// CONFIGURATIONS 
 #define MAP_ROWS   12
-#define MAP_COLS   20
+#define MAP_COLS   20   
 #define MAX_PIECES 10
 #define MAP_LAYERS (1 + MAX_PIECES)   // 0 = world, 1..MAX_PIECES = pieces
 
@@ -20,7 +20,7 @@
 #define TILE_FLOOR  'F'
 #define TILE_PUZZLE 'P'   // CENTER GRID (prints 🔳)
 
-// === STRUCTURES ===
+// STRUCTURES
 struct Player {
     int position_x;
     int position_y;
@@ -46,12 +46,12 @@ int numPieces = 0;
 
 // Piece color emojis
 static const char* PIECE_EMOJI[7] = {
-    "🟥","🟦","🟨","🟩","🟪","🟧","🟫"
+    "1️⃣ ","2️⃣ ","3️⃣ ","4️⃣ ","5️⃣ ","6️⃣ "
 };
 
-// === FUNCTION DECLARATIONS ===
+//FUNCTION DECLARATIONS
 void init_world_layer(void);
-void add_center_grid_4x4(void);
+void puzzle_area(void);
 void initPieces(void);
 void printMap(void);
 char readUserInput(void);
@@ -66,6 +66,7 @@ bool canMovePiece(int index, int dx, int dy);
 void movePiece(int index, int dx, int dy);
 void rotatePiece(int index);
 int findPieceIndexById(char id);
+
 static const char* emoji_for_piece_id(char id);
 
 static inline bool inBounds(int y, int x) {
@@ -107,10 +108,10 @@ void init_world_layer(void) {
                 map[l][x][y] = TILE_EMPTY;
 }
 
-// 🔳 
-void add_center_grid_4x4(void) {
+// 🔳 PUZZLE AREA
+void puzzle_area(void) {
     const int h = 4, w = 4;
-    int x0 = (MAP_ROWS - h+1) / 2;
+    int x0 = (MAP_ROWS - h) / 2;
     int y0 = (MAP_COLS - w) / 2;
 
     for (int x = x0; x < x0 + h; x++) {
@@ -277,7 +278,7 @@ int main(void) {
     printf("Hello Joe! 😁\n\n");
 
     init_world_layer();
-    add_center_grid_4x4();
+    puzzle_area();
     initPieces();
 
     while (1) {
