@@ -8,6 +8,7 @@
 // === CONFIGURATIONS
 #define MAP_ROWS 12 
 #define MAP_COLS 20
+#define MAP_LAYERS 2
 #define MAX_PIECES 10
 
 // Tile codes
@@ -19,6 +20,7 @@
 // Piece color emojis
 static const char* PIECE_EMOJI[7] = {
     "🟥","🟦","🟨","🟩","🟪","🟧","🟫"
+    //"🕐","🕑","🕒","🕓","🕔","🕕"
 };
 
 // === STRUCTURES
