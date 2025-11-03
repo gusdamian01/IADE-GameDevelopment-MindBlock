@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <time.h>
+#include "start_menu.h"
 
 // === CONFIGURATIONS
 #define MAP_ROWS 12 
