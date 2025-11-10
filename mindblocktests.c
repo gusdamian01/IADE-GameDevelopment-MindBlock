@@ -3,27 +3,24 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <time.h>
-#include "start_menu.h"
 
-// === CONFIGURATIONS
-#define MAP_ROWS 12 
-#define MAP_COLS 20
-#define MAP_LAYERS 2
+// CONFIGURATIONS 
+#define MAP_ROWS   12
+#define MAP_COLS   20   
 #define MAX_PIECES 10
+#define MAP_LAYERS (1 + MAX_PIECES)   // 0 = world, 1..MAX_PIECES = pieces
+
+#define LAYER_WORLD       0
+#define LAYER_PIECE_BASE  1
+#define PIECE_LAYER(i)    (LAYER_PIECE_BASE + (i))  // i = piece index 0..MAX_PIECES-1
 
 // Tile codes
-#define TILE_WALL 'W'
-#define TILE_FLOOR 'F'
-#define TILE_PUZZLE 'P'
-#define TILE_MATH 'M'
+#define TILE_EMPTY  '\0'
+#define TILE_WALL   'W'
+#define TILE_FLOOR  'F'
+#define TILE_PUZZLE 'P'   // CENTER GRID (prints 🔳)
 
-// Piece color emojis
-static const char* PIECE_EMOJI[7] = {
-    "🟥","🟦","🟨","🟩","🟪","🟧","🟫"
-    //"🕐","🕑","🕒","🕓","🕔","🕕"
-};
-
-// === STRUCTURES
+// STRUCTURES
 struct Player {
     int position_x;
     int position_y;
@@ -32,67 +29,289 @@ struct Player {
 };
 
 struct Piece {
-    char id;              
-    int size;             
-    int tiles[4][2];      
+    char id;
+    int size;
+    int tiles[4][2];
     int baseX;
     int baseY;
     bool placed;
-    int color;            // 0–6 index into PIECE_EMOJI
+    int color; // 0–6 index into PIECE_EMOJI
 };
 
-// === GLOBALS
-char map[MAP_ROWS][MAP_COLS] = {
-    {'W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','F','W'},
-    {'W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W','W'},
-};
-
+// GLOBALS 
+char map[MAP_LAYERS][MAP_ROWS][MAP_COLS];
 struct Player player = {5, 5, false, '\0'};
 struct Piece pieces[MAX_PIECES];
 int numPieces = 0;
 
-// === FUNCTION DECLARATIONS
+// Piece color emojis
+static const char* PIECE_EMOJI[7] = {
+    "1️⃣ ","2️⃣ ","3️⃣ ","4️⃣ ","5️⃣ ","6️⃣ "
+};
+
+// FUNCTION DECLARATIONS
+void init_world_layer(void);
+void puzzle_area(void);
+void initPieces(void);
 void printMap(void);
 char readUserInput(void);
 
-bool inBounds(int y, int x);
-bool canMovePiece(int index, int dx, int dy);
-
-void movePiece(int index, int dx, int dy);
 void movePlayer(char dir);
-void placePieceOnMap(int index);
-void removePieceFromMap(int index);
-void initPieces(void);
 void interact(void);
 
-int findPieceIndexById(char id);
+void placePieceOnMap(int index);
+void removePieceFromMap(int index);
 bool canPlace(int index);
+bool canMovePiece(int index, int dx, int dy);
+void movePiece(int index, int dx, int dy);
 void rotatePiece(int index);
+int findPieceIndexById(char id);
 
-// Helper to get piece color emoji
 static const char* emoji_for_piece_id(char id);
 
-// === MAIN
+// --- NEW FUNCTION DECLARATIONS ---
+bool is_tile_in_puzzle_area(int x, int y);
+bool allPiecesFitInPuzzleArea(void);
+
+static inline bool inBounds(int y, int x) {
+    return (y >= 0 && y < MAP_ROWS && x >= 0 && x < MAP_COLS);
+}
+static inline char get_top_tile(int x, int y) {
+    for (int l = MAP_LAYERS - 1; l >= 0; --l) {
+        char t = map[l][x][y];
+        if (t != TILE_EMPTY) return t;
+    }
+    return TILE_EMPTY;
+}
+static inline void set_tile(int layer, int x, int y, char t) {
+    if (inBounds(x, y)) map[layer][x][y] = t;
+}
+
+// IMPLEMENTATIONS
+
+void init_world_layer(void) {
+    // World Floor everywhere
+    for (int x = 0; x < MAP_ROWS; x++)
+        for (int y = 0; y < MAP_COLS; y++)
+            map[LAYER_WORLD][x][y] = TILE_FLOOR;
+
+    // Border Walls
+    for (int y = 0; y < MAP_COLS; y++) {
+        map[LAYER_WORLD][0][y] = TILE_WALL;
+        map[LAYER_WORLD][MAP_ROWS-1][y] = TILE_WALL;
+    }
+    for (int x = 0; x < MAP_ROWS; x++) {
+        map[LAYER_WORLD][x][0] = TILE_WALL;
+        map[LAYER_WORLD][x][MAP_COLS-1] = TILE_WALL;
+    }
+
+    // Clear all piece layers
+    for (int l = LAYER_PIECE_BASE; l < MAP_LAYERS; l++)
+        for (int x = 0; x < MAP_ROWS; x++)
+            for (int y = 0; y < MAP_COLS; y++)
+                map[l][x][y] = TILE_EMPTY;
+}
+
+// 🔳 PUZZLE AREA
+void puzzle_area(void) {
+    const int h = 4, w = 4;
+    int x0 = (MAP_ROWS - h) / 2;
+    int y0 = (MAP_COLS - w) / 2;
+
+    for (int x = x0; x < x0 + h; x++) {
+        for (int y = y0; y < y0 + w; y++) {
+            map[LAYER_WORLD][x][y] = TILE_PUZZLE; 
+        }
+    }
+}
+
+void printMap(void) {
+    for (int x = 0; x < MAP_ROWS; x++) {
+        for (int y = 0; y < MAP_COLS; y++) {
+            if (!player.controllingPiece && x == player.position_x && y == player.position_y) {
+                printf("😁");
+                continue;
+            }
+            char top = get_top_tile(x, y);
+            if (top == TILE_WALL)              printf("⬛");
+            else if (top == TILE_PUZZLE)       printf("🔳");  
+            else if (top == TILE_FLOOR || top == TILE_EMPTY) printf("⬜");
+            else if (top >= 'A' && top <= 'Z') printf("%s", emoji_for_piece_id(top));
+            else                                printf(" ");
+        }
+        printf("\n");
+    }
+}
+
+char readUserInput(void) {
+    char input;
+    scanf(" %c", &input);
+    return (char)toupper((unsigned char)input);
+}
+
+void movePlayer(char dir) {
+    int newX = player.position_x;
+    int newY = player.position_y;
+    if (dir == 'W') newX--;
+    else if (dir == 'S') newX++;
+    else if (dir == 'A') newY--;
+    else if (dir == 'D') newY++;
+    else return;
+
+    if (!inBounds(newX, newY)) return;
+    if (map[LAYER_WORLD][newX][newY] == TILE_WALL) return;
+
+    player.position_x = newX;
+    player.position_y = newY;
+}
+
+void interact(void) {
+    // topmost piece at this cell
+    for (int l = MAP_LAYERS - 1; l >= LAYER_PIECE_BASE; --l) {
+        char tile = map[l][player.position_x][player.position_y];
+        if (tile >= 'A' && tile <= 'Z') {
+            player.controllingPiece = true;
+            player.controlledPieceId = tile;
+            printf("You are now controlling piece %c!\n", tile);
+            return;
+        }
+    }
+}
+
+int findPieceIndexById(char id) {
+    for (int i = 0; i < numPieces; i++)
+        if (pieces[i].id == id) return i;
+    return -1;
+}
+
+static const char* emoji_for_piece_id(char id) {
+    int index = findPieceIndexById(id);
+    if (index == -1) return "❓";
+    return PIECE_EMOJI[pieces[index].color % 6];
+}
+
+void placePieceOnMap(int index) {
+    int layer = PIECE_LAYER(index);
+    struct Piece p = pieces[index];
+    for (int i = 0; i < p.size; i++) {
+        int x = p.baseX + p.tiles[i][0];
+        int y = p.baseY + p.tiles[i][1];
+        if (inBounds(x, y)) set_tile(layer, x, y, p.id);
+    }
+}
+
+void removePieceFromMap(int index) {
+    int layer = PIECE_LAYER(index);
+    struct Piece p = pieces[index];
+    for (int i = 0; i < p.size; i++) {
+        int x = p.baseX + p.tiles[i][0];
+        int y = p.baseY + p.tiles[i][1];
+        if (inBounds(x, y) && map[layer][x][y] == p.id)
+            set_tile(layer, x, y, TILE_EMPTY);
+    }
+}
+
+// Movement rules
+bool canPlace(int index) {
+    struct Piece p = pieces[index];
+    for (int i = 0; i < p.size; i++) {
+        int x = p.baseX + p.tiles[i][0];
+        int y = p.baseY + p.tiles[i][1];
+        if (!inBounds(x, y)) return false;
+        if (map[LAYER_WORLD][x][y] == TILE_WALL) return false;
+    }
+    return true;
+}
+
+bool canMovePiece(int index, int dx, int dy) {
+    struct Piece p = pieces[index];
+    for (int i = 0; i < p.size; i++) {
+        int nx = p.baseX + p.tiles[i][0] + dx;
+        int ny = p.baseY + p.tiles[i][1] + dy;
+        if (!inBounds(nx, ny)) return false;
+        if (map[LAYER_WORLD][nx][ny] == TILE_WALL) return false;
+    }
+    return true;
+}
+
+void movePiece(int index, int dx, int dy) {
+    pieces[index].baseX += dx;
+    pieces[index].baseY += dy;
+}
+
+void rotatePiece(int index) {
+    for (int i = 0; i < pieces[index].size; i++) {
+        int x = pieces[index].tiles[i][0];
+        int y = pieces[index].tiles[i][1];
+        pieces[index].tiles[i][0] = y;
+        pieces[index].tiles[i][1] = -x;
+    }
+}
+
+// ✅ FIXED initPieces — replaces S-shape with a second L-shape
+void initPieces(void) {
+    srand((unsigned)time(NULL));
+    numPieces = 0;
+
+    struct Piece square = {'A', 4, {{0,0},{0,1},{1,0},{1,1}}, 3, 3, true, 0};
+    struct Piece line   = {'B', 4, {{0,0},{0,1},{0,2},{0,3}}, 6, 3, true, 0};
+    struct Piece lshape1 = {'C', 4, {{0,0},{1,0},{2,0},{2,1}}, 2,15, true, 0};
+    struct Piece lshape2 = {'D', 4, {{0,1},{1,1},{2,1},{2,0}}, 8,15, true, 0}; // NEW L-shape replacing S
+
+    pieces[numPieces++] = square;
+    pieces[numPieces++] = line;
+    pieces[numPieces++] = lshape1;
+    pieces[numPieces++] = lshape2;
+
+    for (int i = 0; i < numPieces; i++)
+        pieces[i].color = rand() % 7;
+
+    // Clear all piece layers
+    for (int l = LAYER_PIECE_BASE; l < MAP_LAYERS; ++l)
+        for (int x = 0; x < MAP_ROWS; ++x)
+            for (int y = 0; y < MAP_COLS; ++y)
+                map[l][x][y] = TILE_EMPTY;
+
+    // Place each piece in its own layer
+    for (int i = 0; i < numPieces; i++) placePieceOnMap(i);
+}
+
+// ✅ NEW helper functions for level completion
+bool is_tile_in_puzzle_area(int x, int y) {
+    const int h = 4, w = 4;
+    int x0 = (MAP_ROWS - h) / 2;
+    int y0 = (MAP_COLS - w) / 2;
+    return (x >= x0 && x < x0 + h && y >= y0 && y < y0 + w);
+}
+
+bool allPiecesFitInPuzzleArea(void) {
+    for (int i = 0; i < numPieces; i++) {
+        struct Piece p = pieces[i];
+        for (int t = 0; t < p.size; t++) {
+            int x = p.baseX + p.tiles[t][0];
+            int y = p.baseY + p.tiles[t][1];
+            if (!is_tile_in_puzzle_area(x, y)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// MAIN LOOP
 int main(void) {
     printf("Hello Joe! 😁\n\n");
 
+    init_world_layer();
+    puzzle_area();
     initPieces();
 
     while (1) {
         printMap();
 
         if (player.controllingPiece)
-            printf("🧩 You are moving piece %c. (WASD move, R rotate, Q place)\n> ", player.controlledPieceId);
+            printf("🧩 You are moving piece %c. (WASD move, R rotate, Q place)\n> ",
+                   player.controlledPieceId);
         else
             printf("😁 You are Joe. (WASD move, E control piece)\n> ");
 
@@ -112,9 +331,7 @@ int main(void) {
             else if (input == 'R') {
                 removePieceFromMap(index);
                 rotatePiece(index);
-                if (!canPlace(index)) {
-                    for (int i = 0; i < 3; i++) rotatePiece(index);
-                }
+                if (!canPlace(index)) { for (int i = 0; i < 3; i++) rotatePiece(index); }
                 placePieceOnMap(index);
             }
             else {
@@ -132,160 +349,19 @@ int main(void) {
             }
         } 
         else {
-            if (input == 'E' || input == 'e' ) interact();
+            if (input == 'E') interact();
             else movePlayer(input);
+        }
+
+        // ✅ Check for level completion
+        if (allPiecesFitInPuzzleArea()) {
+            printMap();
+            printf("🎉 Level Complete. Well done!\n");
+            break;
         }
 
         printf("\n\n");
     }
 
     return 0;
-}
-
-// === IMPLEMENTATIONS
-
-void printMap(void) {
-    for (int x = 0; x < MAP_ROWS; x++) {
-        for (int y = 0; y < MAP_COLS; y++) {
-            if (!player.controllingPiece && x == player.position_x && y == player.position_y)
-                printf("😁");
-            else if (map[x][y] == 'W')
-                printf("⬛");
-            else if (map[x][y] == 'F')
-                printf("⬜");
-            else if (map[x][y] >= 'A' && map[x][y] <= 'Z')
-                printf("%s", emoji_for_piece_id(map[x][y]));
-        }
-        printf("\n");
-    }
-}
-
-char readUserInput(void) {
-    char input;
-    scanf(" %c", &input);
-    return (char)toupper((unsigned char)input);
-}
-
-bool inBounds(int y, int x) {
-    return (y >= 0 && y < MAP_ROWS && x >= 0 && x < MAP_COLS);
-}
-
-void movePlayer(char dir) {
-    int newX = player.position_x;
-    int newY = player.position_y;
-
-    if (dir == 'W') newX--;
-    else if (dir == 'S') newX++;
-    else if (dir == 'A') newY--;
-    else if (dir == 'D') newY++;
-    else return;
-
-    if (!inBounds(newX, newY)) return;
-    if (map[newX][newY] == 'W') return;
-
-    player.position_x = newX;
-    player.position_y = newY;
-}
-
-void interact(void) {
-    char tile = map[player.position_x][player.position_y];
-    if (tile >= 'A' && tile <= 'Z') {
-        player.controllingPiece = true;
-        player.controlledPieceId = tile;
-        printf("You are now controlling piece %c!\n", tile);
-    }
-}
-
-int findPieceIndexById(char id) {
-    for (int i = 0; i < numPieces; i++) {
-        if (pieces[i].id == id) return i;
-    }
-    return -1;
-}
-
-static const char* emoji_for_piece_id(char id) {
-    int index = findPieceIndexById(id);
-    if (index == -1) return "❓";
-    return PIECE_EMOJI[pieces[index].color % 7];
-}
-
-// === PIECE SYSTEM
-
-void placePieceOnMap(int index) {
-    struct Piece piece = pieces[index];
-    for (int i = 0; i < piece.size; i++) {
-        int x = piece.baseX + piece.tiles[i][0];
-        int y = piece.baseY + piece.tiles[i][1];
-        if (inBounds(x, y)) map[x][y] = piece.id;
-    }
-}
-
-void removePieceFromMap(int index) {
-    struct Piece piece = pieces[index];
-    for (int i = 0; i < piece.size; i++) {
-        int x = piece.baseX + piece.tiles[i][0];
-        int y = piece.baseY + piece.tiles[i][1];
-        if (inBounds(x, y)) map[x][y] = TILE_FLOOR;
-    }
-}
-
-bool canPlace(int index) {
-    struct Piece piece = pieces[index];
-    for (int i = 0; i < piece.size; i++) {
-        int x = piece.baseX + piece.tiles[i][0];
-        int y = piece.baseY + piece.tiles[i][1];
-        if (!inBounds(x, y)) return false;
-        if (map[x][y] == 'W') return false;
-    }
-    return true;
-}
-
-bool canMovePiece(int index, int dx, int dy) {
-    struct Piece piece = pieces[index];
-    for (int i = 0; i < piece.size; i++) {
-        int newX = piece.baseX + piece.tiles[i][0] + dx;
-        int newY = piece.baseY + piece.tiles[i][1] + dy;
-        if (!inBounds(newX, newY)) return false;
-        if (map[newX][newY] == 'W') return false;
-    }
-    return true;
-}
-
-void movePiece(int index, int dx, int dy) {
-    pieces[index].baseX += dx;
-    pieces[index].baseY += dy;
-}
-
-void rotatePiece(int index) {
-    for (int i = 0; i < pieces[index].size; i++) {
-        int x = pieces[index].tiles[i][0];
-        int y = pieces[index].tiles[i][1];
-        pieces[index].tiles[i][0] = y;
-        pieces[index].tiles[i][1] = -x;
-    }
-}
-
-void initPieces(void) {
-    srand((unsigned)time(NULL));
-
-    struct Piece square = {'A', 4, {{0,0},{0,1},{1,0},{1,1}}, 3, 3, true, 0};
-    pieces[numPieces++] = square;
-
-    struct Piece line = {'B', 4, {{0,0},{0,1},{0,2},{0,3}}, 6, 3, true, 0};
-    pieces[numPieces++] = line;
-
-    struct Piece lshape = {'C', 4, {{0,0},{1,0},{2,0},{2,1}}, 2, 15, true, 0};
-    pieces[numPieces++] = lshape;
-
-    struct Piece tshape = {'D', 4, {{0,1},{1,0},{1,1},{1,2}}, 8, 3, true, 0};
-    pieces[numPieces++] = tshape;
-
-    struct Piece sshape = {'E', 4, {{0,1},{0,2},{1,0},{1,1}}, 8, 15, true, 0};
-    pieces[numPieces++] = sshape;
-
-    for (int i = 0; i < numPieces; i++) {
-        pieces[i].color = rand() % 7;
-    }
-
-    for (int i = 0; i < numPieces; i++) placePieceOnMap(i);
 }

@@ -49,7 +49,7 @@ static const char* PIECE_EMOJI[7] = {
     "1️⃣ ","2️⃣ ","3️⃣ ","4️⃣ ","5️⃣ ","6️⃣ "
 };
 
-//FUNCTION DECLARATIONS
+// FUNCTION DECLARATIONS
 void init_world_layer(void);
 void puzzle_area(void);
 void initPieces(void);
@@ -69,6 +69,10 @@ int findPieceIndexById(char id);
 
 static const char* emoji_for_piece_id(char id);
 
+// --- NEW FUNCTION DECLARATIONS ---
+bool is_tile_in_puzzle_area(int x, int y);
+bool allPiecesFitInPuzzleArea(void);
+
 static inline bool inBounds(int y, int x) {
     return (y >= 0 && y < MAP_ROWS && x >= 0 && x < MAP_COLS);
 }
@@ -83,7 +87,7 @@ static inline void set_tile(int layer, int x, int y, char t) {
     if (inBounds(x, y)) map[layer][x][y] = t;
 }
 
-//IMPLEMENTATIONS
+// IMPLEMENTATIONS
 
 void init_world_layer(void) {
     // World Floor everywhere
@@ -183,7 +187,7 @@ int findPieceIndexById(char id) {
 static const char* emoji_for_piece_id(char id) {
     int index = findPieceIndexById(id);
     if (index == -1) return "❓";
-    return PIECE_EMOJI[pieces[index].color % 7];
+    return PIECE_EMOJI[pieces[index].color % 6];
 }
 
 void placePieceOnMap(int index) {
@@ -207,7 +211,7 @@ void removePieceFromMap(int index) {
     }
 }
 
-//Movement rules
+// Movement rules
 bool canPlace(int index) {
     struct Piece p = pieces[index];
     for (int i = 0; i < p.size; i++) {
@@ -244,21 +248,20 @@ void rotatePiece(int index) {
     }
 }
 
+// ✅ FIXED initPieces — replaces S-shape with a second L-shape
 void initPieces(void) {
     srand((unsigned)time(NULL));
     numPieces = 0;
 
     struct Piece square = {'A', 4, {{0,0},{0,1},{1,0},{1,1}}, 3, 3, true, 0};
     struct Piece line   = {'B', 4, {{0,0},{0,1},{0,2},{0,3}}, 6, 3, true, 0};
-    struct Piece lshape = {'C', 4, {{0,0},{1,0},{2,0},{2,1}}, 2,15, true, 0};
-    struct Piece tshape = {'D', 4, {{0,1},{1,0},{1,1},{1,2}}, 8, 3, true, 0};
-    struct Piece sshape = {'E', 4, {{0,1},{0,2},{1,0},{1,1}}, 8,15, true, 0};
+    struct Piece lshape1 = {'C', 4, {{0,0},{1,0},{2,0},{2,1}}, 2,15, true, 0};
+    struct Piece lshape2 = {'D', 4, {{0,1},{1,1},{2,1},{2,0}}, 8,15, true, 0}; // NEW L-shape replacing S
 
     pieces[numPieces++] = square;
     pieces[numPieces++] = line;
-    pieces[numPieces++] = lshape;
-    pieces[numPieces++] = tshape;
-    pieces[numPieces++] = sshape;
+    pieces[numPieces++] = lshape1;
+    pieces[numPieces++] = lshape2;
 
     for (int i = 0; i < numPieces; i++)
         pieces[i].color = rand() % 7;
@@ -273,7 +276,29 @@ void initPieces(void) {
     for (int i = 0; i < numPieces; i++) placePieceOnMap(i);
 }
 
-//MAIN LOOP
+// ✅ NEW helper functions for level completion
+bool is_tile_in_puzzle_area(int x, int y) {
+    const int h = 4, w = 4;
+    int x0 = (MAP_ROWS - h) / 2;
+    int y0 = (MAP_COLS - w) / 2;
+    return (x >= x0 && x < x0 + h && y >= y0 && y < y0 + w);
+}
+
+bool allPiecesFitInPuzzleArea(void) {
+    for (int i = 0; i < numPieces; i++) {
+        struct Piece p = pieces[i];
+        for (int t = 0; t < p.size; t++) {
+            int x = p.baseX + p.tiles[t][0];
+            int y = p.baseY + p.tiles[t][1];
+            if (!is_tile_in_puzzle_area(x, y)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// MAIN LOOP
 int main(void) {
     printf("Hello Joe! 😁\n\n");
 
@@ -326,6 +351,13 @@ int main(void) {
         else {
             if (input == 'E') interact();
             else movePlayer(input);
+        }
+
+        // ✅ Check for level completion
+        if (allPiecesFitInPuzzleArea()) {
+            printMap();
+            printf("🎉 Level Complete. Well done!\n");
+            break;
         }
 
         printf("\n\n");
