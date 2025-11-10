@@ -276,7 +276,7 @@ void initPieces(void) {
     for (int i = 0; i < numPieces; i++) placePieceOnMap(i);
 }
 
-// ✅ NEW helper functions for level completion
+// ✅ NEW helper functions for level completion with overlap check
 bool is_tile_in_puzzle_area(int x, int y) {
     const int h = 4, w = 4;
     int x0 = (MAP_ROWS - h) / 2;
@@ -290,9 +290,13 @@ bool allPiecesFitInPuzzleArea(void) {
         for (int t = 0; t < p.size; t++) {
             int x = p.baseX + p.tiles[t][0];
             int y = p.baseY + p.tiles[t][1];
-            if (!is_tile_in_puzzle_area(x, y)) {
-                return false;
-            }
+
+            // Must be in puzzle area
+            if (!is_tile_in_puzzle_area(x, y)) return false;
+
+            // The top tile must be the piece itself (no overlaps)
+            char top = get_top_tile(x, y);
+            if (top != p.id) return false;
         }
     }
     return true;

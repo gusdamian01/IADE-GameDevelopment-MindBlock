@@ -69,7 +69,6 @@ int findPieceIndexById(char id);
 
 static const char* emoji_for_piece_id(char id);
 
-// --- NEW FUNCTION DECLARATIONS ---
 bool is_tile_in_puzzle_area(int x, int y);
 bool allPiecesFitInPuzzleArea(void);
 
