@@ -8,17 +8,21 @@
 #define MAP_ROWS   12
 #define MAP_COLS   20   
 #define MAX_PIECES 10
-#define MAP_LAYERS (1 + MAX_PIECES)   // 0 = world, 1..MAX_PIECES = pieces
+#define MAP_LAYERS (1 + MAX_PIECES)
 
 #define LAYER_WORLD       0
 #define LAYER_PIECE_BASE  1
-#define PIECE_LAYER(i)    (LAYER_PIECE_BASE + (i))  // i = piece index 0..MAX_PIECES-1
+#define PIECE_LAYER(i)    (LAYER_PIECE_BASE + (i))
 
 // Tile codes
 #define TILE_EMPTY  '\0'
 #define TILE_WALL   'W'
 #define TILE_FLOOR  'F'
-#define TILE_PUZZLE 'P'   // CENTER GRID (prints 🔳)
+#define TILE_PUZZLE 'P'   // the general puzzle area background (4x4)
+
+// Constraint targets
+#define ORANGE_TARGET_SUM 4   // piece A
+#define PURPLE_TARGET_SUM 8   // piece C
 
 // STRUCTURES
 struct Player {
@@ -31,12 +35,17 @@ struct Player {
 struct Piece {
     char id;
     int size;
-    int tiles[4][2];
+    int tiles[4][2];  // relative positions to base
+    int values[4];    // per-tile values
     int baseX;
     int baseY;
     bool placed;
-    int color; // 0–6 index into PIECE_EMOJI
 };
+
+typedef struct {
+    int targetSum;
+    char pieceId;  // which piece this constraint applies to
+} ConstraintRegion;
 
 // GLOBALS 
 char map[MAP_LAYERS][MAP_ROWS][MAP_COLS];
@@ -44,14 +53,19 @@ struct Player player = {5, 5, false, '\0'};
 struct Piece pieces[MAX_PIECES];
 int numPieces = 0;
 
-// Piece color emojis
-static const char* PIECE_EMOJI[7] = {
-    "1️⃣ ","2️⃣ ","3️⃣ ","4️⃣ ","5️⃣ ","6️⃣ "
+// Two constraints: orange (square) & purple (L-shape)
+ConstraintRegion orangeConstraint;
+ConstraintRegion purpleConstraint;
+
+// Value emojis (1..7)
+static const char* VALUE_EMOJI[7] = {
+    "1️⃣ ","2️⃣ ","3️⃣ ","4️⃣ ","5️⃣ ","6️⃣ ","7️⃣ "
 };
 
 // FUNCTION DECLARATIONS
 void init_world_layer(void);
 void puzzle_area(void);
+void init_constraints(void);
 void initPieces(void);
 void printMap(void);
 char readUserInput(void);
@@ -65,16 +79,20 @@ bool canPlace(int index);
 bool canMovePiece(int index, int dx, int dy);
 void movePiece(int index, int dx, int dy);
 void rotatePiece(int index);
-int findPieceIndexById(char id);
+int  findPieceIndexById(char id);
 
-static const char* emoji_for_piece_id(char id);
-
-// --- NEW FUNCTION DECLARATIONS ---
 bool is_tile_in_puzzle_area(int x, int y);
+bool is_tile_in_orange(int x, int y);
+bool is_tile_in_purple(int x, int y);
+int  sumTilesInOrange(void);
+int  sumTilesInPurple(void);
+bool constraintsSatisfied(void);
 bool allPiecesFitInPuzzleArea(void);
+void findPieceAndTileAt(int x, int y, int *pieceIndex, int *tileIndex);
 
-static inline bool inBounds(int y, int x) {
-    return (y >= 0 && y < MAP_ROWS && x >= 0 && x < MAP_COLS);
+// Helpers
+static inline bool inBounds(int x, int y) {
+    return (x >= 0 && x < MAP_ROWS && y >= 0 && y < MAP_COLS);
 }
 static inline char get_top_tile(int x, int y) {
     for (int l = MAP_LAYERS - 1; l >= 0; --l) {
@@ -87,15 +105,22 @@ static inline void set_tile(int layer, int x, int y, char t) {
     if (inBounds(x, y)) map[layer][x][y] = t;
 }
 
+// Compute top-left of the 4x4 puzzle area
+void get_puzzle_origin(int *px0, int *py0) {
+    const int h = 4, w = 4;
+    *px0 = (MAP_ROWS - h) / 2;
+    *py0 = (MAP_COLS - w) / 2;
+}
+
 // IMPLEMENTATIONS
 
 void init_world_layer(void) {
-    // World Floor everywhere
+    // Floor
     for (int x = 0; x < MAP_ROWS; x++)
         for (int y = 0; y < MAP_COLS; y++)
             map[LAYER_WORLD][x][y] = TILE_FLOOR;
 
-    // Border Walls
+    // Border walls
     for (int y = 0; y < MAP_COLS; y++) {
         map[LAYER_WORLD][0][y] = TILE_WALL;
         map[LAYER_WORLD][MAP_ROWS-1][y] = TILE_WALL;
@@ -105,14 +130,14 @@ void init_world_layer(void) {
         map[LAYER_WORLD][x][MAP_COLS-1] = TILE_WALL;
     }
 
-    // Clear all piece layers
+    // Clear piece layers
     for (int l = LAYER_PIECE_BASE; l < MAP_LAYERS; l++)
         for (int x = 0; x < MAP_ROWS; x++)
             for (int y = 0; y < MAP_COLS; y++)
                 map[l][x][y] = TILE_EMPTY;
 }
 
-// 🔳 PUZZLE AREA
+// Place the overall puzzle area (4x4) at the center
 void puzzle_area(void) {
     const int h = 4, w = 4;
     int x0 = (MAP_ROWS - h) / 2;
@@ -125,22 +150,91 @@ void puzzle_area(void) {
     }
 }
 
+// Initialize constraints for orange (A) & purple (C)
+void init_constraints(void) {
+    orangeConstraint.pieceId   = 'A';
+    orangeConstraint.targetSum = ORANGE_TARGET_SUM;
+
+    purpleConstraint.pieceId   = 'C';
+    purpleConstraint.targetSum = PURPLE_TARGET_SUM;
+}
+
+// Find which piece/tile occupies (x,y)
+void findPieceAndTileAt(int x, int y, int *pieceIndex, int *tileIndex) {
+    *pieceIndex = -1;
+    *tileIndex  = -1;
+    for (int i = 0; i < numPieces; ++i) {
+        struct Piece *p = &pieces[i];
+        for (int t = 0; t < p->size; ++t) {
+            int px = p->baseX + p->tiles[t][0];
+            int py = p->baseY + p->tiles[t][1];
+            if (px == x && py == y) {
+                *pieceIndex = i;
+                *tileIndex  = t;
+                return;
+            }
+        }
+    }
+}
+
 void printMap(void) {
     for (int x = 0; x < MAP_ROWS; x++) {
         for (int y = 0; y < MAP_COLS; y++) {
-            if (!player.controllingPiece && x == player.position_x && y == player.position_y) {
+
+            // Player (when not controlling a piece)
+            if (!player.controllingPiece &&
+                x == player.position_x && y == player.position_y) {
                 printf("😁");
                 continue;
             }
-            char top = get_top_tile(x, y);
-            if (top == TILE_WALL)              printf("⬛");
-            else if (top == TILE_PUZZLE)       printf("🔳");  
-            else if (top == TILE_FLOOR || top == TILE_EMPTY) printf("⬜");
-            else if (top >= 'A' && top <= 'Z') printf("%s", emoji_for_piece_id(top));
-            else                                printf(" ");
+
+            int pIdx, tIdx;
+            findPieceAndTileAt(x, y, &pIdx, &tIdx);
+
+            // 1) Piece tiles (per-tile number) are on top of everything
+            if (pIdx != -1 && tIdx != -1) {
+                int val = pieces[pIdx].values[tIdx];
+                if (val < 1) val = 1;
+                if (val > 7) val = 7;
+                printf("%s", VALUE_EMOJI[val - 1]);
+                continue;
+            }
+
+            // 2) Constraint backgrounds: purple first, then orange
+            if (is_tile_in_purple(x, y)) {
+                printf("🟪");
+                continue;
+            }
+            if (is_tile_in_orange(x, y)) {
+                printf("🟧");
+                continue;
+            }
+
+            char top = map[LAYER_WORLD][x][y];
+
+            // 3) World / puzzle / floor
+            if (top == TILE_WALL) {
+                printf("⬛");
+            }
+            else if (top == TILE_PUZZLE) {
+                printf("🔳"); // plain puzzle cells
+            }
+            else if (top == TILE_FLOOR || top == TILE_EMPTY) {
+                printf("⬜");
+            }
+            else {
+                printf(" ");
+            }
         }
         printf("\n");
     }
+
+    printf(
+        "\nOrange 🟧 sum must be %d, current = %d\n"
+        "Purple 🟪 sum must be %d, current = %d\n",
+        orangeConstraint.targetSum, sumTilesInOrange(),
+        purpleConstraint.targetSum, sumTilesInPurple()
+    );
 }
 
 char readUserInput(void) {
@@ -166,7 +260,6 @@ void movePlayer(char dir) {
 }
 
 void interact(void) {
-    // topmost piece at this cell
     for (int l = MAP_LAYERS - 1; l >= LAYER_PIECE_BASE; --l) {
         char tile = map[l][player.position_x][player.position_y];
         if (tile >= 'A' && tile <= 'Z') {
@@ -182,12 +275,6 @@ int findPieceIndexById(char id) {
     for (int i = 0; i < numPieces; i++)
         if (pieces[i].id == id) return i;
     return -1;
-}
-
-static const char* emoji_for_piece_id(char id) {
-    int index = findPieceIndexById(id);
-    if (index == -1) return "❓";
-    return PIECE_EMOJI[pieces[index].color % 6];
 }
 
 void placePieceOnMap(int index) {
@@ -211,7 +298,6 @@ void removePieceFromMap(int index) {
     }
 }
 
-// Movement rules
 bool canPlace(int index) {
     struct Piece p = pieces[index];
     for (int i = 0; i < p.size; i++) {
@@ -240,6 +326,7 @@ void movePiece(int index, int dx, int dy) {
 }
 
 void rotatePiece(int index) {
+    // 90-degree rotation: (x,y) -> (y,-x)
     for (int i = 0; i < pieces[index].size; i++) {
         int x = pieces[index].tiles[i][0];
         int y = pieces[index].tiles[i][1];
@@ -248,40 +335,124 @@ void rotatePiece(int index) {
     }
 }
 
-// ✅ FIXED initPieces — replaces S-shape with a second L-shape
 void initPieces(void) {
     srand((unsigned)time(NULL));
     numPieces = 0;
 
-    struct Piece square = {'A', 4, {{0,0},{0,1},{1,0},{1,1}}, 3, 3, true, 0};
-    struct Piece line   = {'B', 4, {{0,0},{0,1},{0,2},{0,3}}, 6, 3, true, 0};
-    struct Piece lshape1 = {'C', 4, {{0,0},{1,0},{2,0},{2,1}}, 2,15, true, 0};
-    struct Piece lshape2 = {'D', 4, {{0,1},{1,1},{2,1},{2,0}}, 8,15, true, 0}; // NEW L-shape replacing S
+    // 2x2 Square (piece A) – all 1's so sum=4 in orange area
+    struct Piece square = {
+        'A', 4,
+        {{0,0},{0,1},{1,0},{1,1}},
+        {1,1,1,1},
+        3, 3, true
+    };
+
+    // 1x4 Line (piece B) – varied values: 2️⃣3️⃣4️⃣5️⃣
+    struct Piece line   = {
+        'B', 4,
+        {{0,0},{0,1},{0,2},{0,3}},
+        {2,3,4,5},
+        6, 3, true
+    };
+
+    // L-shape (piece C) – all 2's so sum=8 in purple L
+    struct Piece lshape1 = {
+        'C', 4,
+        {{0,0},{1,0},{2,0},{2,1}},
+        {2,2,2,2},
+        2, 15, true
+    };
+
+    // Mirrored L-shape (piece D)
+    struct Piece lshape2 = {
+        'D', 4,
+        {{0,1},{1,1},{2,1},{2,0}},
+        {2,2,3,3},
+        8, 15, true
+    };
 
     pieces[numPieces++] = square;
     pieces[numPieces++] = line;
     pieces[numPieces++] = lshape1;
     pieces[numPieces++] = lshape2;
 
-    for (int i = 0; i < numPieces; i++)
-        pieces[i].color = rand() % 7;
-
-    // Clear all piece layers
+    // Clear piece layers
     for (int l = LAYER_PIECE_BASE; l < MAP_LAYERS; ++l)
         for (int x = 0; x < MAP_ROWS; ++x)
             for (int y = 0; y < MAP_COLS; ++y)
                 map[l][x][y] = TILE_EMPTY;
 
-    // Place each piece in its own layer
+    // Place each piece
     for (int i = 0; i < numPieces; i++) placePieceOnMap(i);
 }
 
-// ✅ NEW helper functions for level completion with overlap check
 bool is_tile_in_puzzle_area(int x, int y) {
+    int x0, y0;
+    get_puzzle_origin(&x0, &y0);
     const int h = 4, w = 4;
-    int x0 = (MAP_ROWS - h) / 2;
-    int y0 = (MAP_COLS - w) / 2;
     return (x >= x0 && x < x0 + h && y >= y0 && y < y0 + w);
+}
+
+// Orange region: 2x2 block in center of 4x4
+// Coordinates relative to puzzle 4x4:
+// (1,1),(1,2),(2,1),(2,2)
+bool is_tile_in_orange(int x, int y) {
+    int px0, py0;
+    get_puzzle_origin(&px0, &py0);
+    return ((x == px0+1 && (y == py0+1 || y == py0+2)) ||
+            (x == px0+2 && (y == py0+1 || y == py0+2)));
+}
+
+// Purple region: L-shape described by:
+// row0: 🟪 🟪 🟪 .
+// row1: 🟪 .  .  .
+// (relative to top-left of puzzle)
+bool is_tile_in_purple(int x, int y) {
+    int px0, py0;
+    get_puzzle_origin(&px0, &py0);
+    // top row of L
+    if (x == px0 && (y == py0 || y == py0+1 || y == py0+2)) return true;
+    // vertical down from left
+    if (x == px0+1 && y == py0) return true;
+    return false;
+}
+
+int sumTilesInOrange(void) {
+    int sum = 0;
+    for (int i = 0; i < numPieces; i++) {
+        if (pieces[i].id != orangeConstraint.pieceId) continue;
+        struct Piece p = pieces[i];
+        for (int t = 0; t < p.size; t++) {
+            int x = p.baseX + p.tiles[t][0];
+            int y = p.baseY + p.tiles[t][1];
+            if (is_tile_in_orange(x, y)) {
+                sum += p.values[t];
+            }
+        }
+    }
+    return sum;
+}
+
+int sumTilesInPurple(void) {
+    int sum = 0;
+    for (int i = 0; i < numPieces; i++) {
+        if (pieces[i].id != purpleConstraint.pieceId) continue;
+        struct Piece p = pieces[i];
+        for (int t = 0; t < p.size; t++) {
+            int x = p.baseX + p.tiles[t][0];
+            int y = p.baseY + p.tiles[t][1];
+            if (is_tile_in_purple(x, y)) {
+                sum += p.values[t];
+            }
+        }
+    }
+    return sum;
+}
+
+bool constraintsSatisfied(void) {
+    if (sumTilesInOrange() != orangeConstraint.targetSum) return false;
+    if (sumTilesInPurple() != purpleConstraint.targetSum) return false;
+    return true;
 }
 
 bool allPiecesFitInPuzzleArea(void) {
@@ -291,7 +462,7 @@ bool allPiecesFitInPuzzleArea(void) {
             int x = p.baseX + p.tiles[t][0];
             int y = p.baseY + p.tiles[t][1];
 
-            // Must be in puzzle area
+            // Must be inside puzzle area
             if (!is_tile_in_puzzle_area(x, y)) return false;
 
             // The top tile must be the piece itself (no overlaps)
@@ -308,6 +479,7 @@ int main(void) {
 
     init_world_layer();
     puzzle_area();
+    init_constraints();
     initPieces();
 
     while (1) {
@@ -345,10 +517,12 @@ int main(void) {
                 else if (input == 'A') dy = -1;
                 else if (input == 'D') dy = 1;
 
-                if (canMovePiece(index, dx, dy)) {
-                    removePieceFromMap(index);
-                    movePiece(index, dx, dy);
-                    placePieceOnMap(index);
+                if (dx != 0 || dy != 0) {
+                    if (canMovePiece(index, dx, dy)) {
+                        removePieceFromMap(index);
+                        movePiece(index, dx, dy);
+                        placePieceOnMap(index);
+                    }
                 }
             }
         } 
@@ -357,10 +531,10 @@ int main(void) {
             else movePlayer(input);
         }
 
-        // ✅ Check for level completion
-        if (allPiecesFitInPuzzleArea()) {
+        // Victory: all tiles inside 4x4 puzzle area AND both constraints satisfied
+        if (allPiecesFitInPuzzleArea() && constraintsSatisfied()) {
             printMap();
-            printf("🎉 Level Complete. Well done!\n");
+            printf("🎉 Level Complete. Both constraints satisfied!\n");
             break;
         }
 

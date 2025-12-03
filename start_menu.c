@@ -1,8 +1,10 @@
+// main_menu.c
+
 #include <stdio.h>
 #include <stdlib.h>
 
 // Displays the start menu
-void display_start_menu(void) {
+static void display_start_menu(void) {
     printf("=== Welcome to Mindblock! ===\n");
     printf("1. Play\n");
     printf("2. Settings\n");

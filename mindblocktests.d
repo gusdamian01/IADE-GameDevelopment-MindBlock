@@ -1,0 +1,1 @@
+mindblocktests.o: mindblocktests.c
