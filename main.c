@@ -9,6 +9,7 @@
 #include <time.h>
 
 static SDL_Texture *playerTexture = NULL;
+static SDL_Texture* floorTexture = NULL;
 
 // CONFIGURATIONS
 #define MAP_ROWS 12
@@ -113,7 +114,7 @@ void findPieceAndTileAt(int x, int y, int *pieceIndex, int *tileIndex);
 int main(void)
 {
     // Initialize SDL Systems.
-    window = sdl_initialize_window(APP_NAME, APP_WIDTH, APP_HEIGHT);
+    window = sdl_initialize_window(APP_NAME, APP_HEIGHT, APP_WIDTH);
     renderer = sdl_initialize_renderer(window);
     sdl_initialize_audio();
 
@@ -124,6 +125,7 @@ int main(void)
 
     // Load Sprites
     playerTexture = sdl_load_texture(renderer, "sprites/Joe.png");
+    floorTexture = sdl_load_texture(renderer, "sprites/PlayArea.png");
 
     // Game Loop
     int running = 1;
@@ -131,7 +133,6 @@ int main(void)
     while (running)
     {
         Uint32 frame_start = SDL_GetTicks();
-
         // Capture Events
         SDL_Event event;
         while (SDL_PollEvent(&event))
@@ -141,28 +142,14 @@ int main(void)
 
             if (event.type == SDL_EVENT_KEY_DOWN)
             {
-                int index = findPieceIndexById(player.controlledPieceId);
-                int dx = 0, dy = 0;
-
                 if (event.key.key == SDLK_W)
-                    dx = -1;
+                    movePlayer('W');
                 if (event.key.key == SDLK_A)
-                    dy = -1;
+                    movePlayer('A');
                 if (event.key.key == SDLK_S)
-                    dx = 1;
+                    movePlayer('S');
                 if (event.key.key == SDLK_D)
-                    dy = 1;
-
-                if (dx != 0 || dy != 0)
-                {
-                    printf("moving %d %d", dx, dy);
-                    if (canMovePiece(index, dx, dy))
-                    {
-                        removePieceFromMap(index);
-                        movePiece(index, dx, dy);
-                        placePieceOnMap(index);
-                    }
-                }
+                    movePlayer('D');
             }
         }
 
@@ -215,19 +202,19 @@ void printMap(void)
                     val = 1;
                 if (val > 7)
                     val = 7;
-                printf("%s", VALUE_EMOJI[val - 1]);
+                // printf("%s", VALUE_EMOJI[val - 1]);
                 continue;
             }
 
             // 2) Constraint backgrounds: purple first, then orange
             if (is_tile_in_purple(x, y))
             {
-                printf("🟪");
+                // printf("🟪");
                 continue;
             }
             if (is_tile_in_orange(x, y))
             {
-                printf("🟧");
+                // printf("🟧");
                 continue;
             }
 
@@ -236,29 +223,31 @@ void printMap(void)
             // 3) World / puzzle / floor
             if (top == TILE_WALL)
             {
-                printf("⬛");
+                // printf("⬛");
             }
             else if (top == TILE_PUZZLE)
             {
-                printf("🔳"); // plain puzzle cells
+                // printf("🔳"); // plain puzzle cells
             }
             else if (top == TILE_FLOOR || top == TILE_EMPTY)
             {
-                printf("⬜");
+                // printf("⬜");
+                SDL_FRect floorRect = {x * TEXTURE_WIDTH, y * TEXTURE_HEIGHT, 32, 32};
+                SDL_RenderTexture(renderer, floorTexture, NULL, &floorRect);
             }
             else
             {
-                printf(" ");
+                // printf(" ");
             }
         }
-        printf("\n");
+        // printf("\n");
     }
 
-    printf(
-        "\nOrange 🟧 sum must be %d, current = %d\n"
-        "Purple 🟪 sum must be %d, current = %d\n",
-        orangeConstraint.targetSum, sumTilesInOrange(),
-        purpleConstraint.targetSum, sumTilesInPurple());
+    // printf(
+    //     "\nOrange 🟧 sum must be %d, current = %d\n"
+    //     "Purple 🟪 sum must be %d, current = %d\n",
+    //     orangeConstraint.targetSum, sumTilesInOrange(),
+    //     purpleConstraint.targetSum, sumTilesInPurple());
 
     showText(renderer, 100, 0, "Potion Collector!", (SDL_Color){255, 255, 255, SDL_ALPHA_OPAQUE});
     SDL_RenderDebugTextFormat(renderer, (float)((APP_WIDTH - (charsize * 46)) / 2), APP_HEIGHT - charsize, "(This program has been running for %" SDL_PRIu64 " seconds.)", SDL_GetTicks() / 1000);
@@ -275,6 +264,23 @@ static inline void set_tile(int layer, int x, int y, char t)
 {
     if (inBounds(x, y))
         map[layer][x][y] = t;
+}
+
+
+void movePlayer(char dir) {
+    int newX = player.position_x;
+    int newY = player.position_y;
+    if (dir == 'W') newY--;
+    else if (dir == 'S') newY++;
+    else if (dir == 'A') newX--;
+    else if (dir == 'D') newX++;
+    else return;
+
+    if (!inBounds(newX, newY)) return;
+    if (map[LAYER_WORLD][newX][newY] == TILE_WALL) return;
+
+    player.position_x = newX;
+    player.position_y = newY;
 }
 
 bool canMovePiece(int index, int dx, int dy)
@@ -425,7 +431,8 @@ void init_world_layer(void)
                 map[l][x][y] = TILE_EMPTY;
 }
 
-void movePiece(int index, int dx, int dy) {
+void movePiece(int index, int dx, int dy)
+{
     pieces[index].baseX += dx;
     pieces[index].baseY += dy;
 }
@@ -463,7 +470,11 @@ void removePieceFromMap(int index)
         int x = p.baseX + p.tiles[i][0];
         int y = p.baseY + p.tiles[i][1];
         if (inBounds(x, y) && map[layer][x][y] == p.id)
+
+        {
+            SDL_Log("Clean");
             set_tile(layer, x, y, TILE_EMPTY);
+        }
     }
 }
 
