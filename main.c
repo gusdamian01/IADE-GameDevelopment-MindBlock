@@ -9,7 +9,8 @@
 #include <time.h>
 
 static SDL_Texture *playerTexture = NULL;
-static SDL_Texture* floorTexture = NULL;
+static SDL_Texture *floorTexture = NULL;
+static SDL_Texture *puzzleTexture = NULL;
 
 // CONFIGURATIONS
 #define MAP_ROWS 12
@@ -126,6 +127,7 @@ int main(void)
     // Load Sprites
     playerTexture = sdl_load_texture(renderer, "sprites/Joe.png");
     floorTexture = sdl_load_texture(renderer, "sprites/PlayArea.png");
+    puzzleTexture = sdl_load_texture(renderer, "sprites/Contraint1.png");
 
     // Game Loop
     int running = 1;
@@ -228,6 +230,8 @@ void printMap(void)
             else if (top == TILE_PUZZLE)
             {
                 // printf("🔳"); // plain puzzle cells
+                SDL_FRect floorRect = {x * TEXTURE_WIDTH, y * TEXTURE_HEIGHT, 32, 32};
+                SDL_RenderTexture(renderer, puzzleTexture, NULL, &floorRect);
             }
             else if (top == TILE_FLOOR || top == TILE_EMPTY)
             {
