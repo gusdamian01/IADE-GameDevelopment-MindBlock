@@ -58,7 +58,7 @@ bool init_sound(const char *fname, Sound *sound)
     char *wav_path = NULL;
 
     /* Load the .wav files from wherever the app is being run from. */
-    printf("Loading sound from file: %s%s\n", SDL_GetBasePath(), fname);
+    SDL_Log("Loading sound from file: %s%s\n", SDL_GetBasePath(), fname);
     SDL_asprintf(&wav_path, "%s%s", SDL_GetBasePath(), fname); /* allocate a string of the full file path */
     if (!SDL_LoadWAV(wav_path, &spec, &sound->wav_data, &sound->wav_data_len))
     {
@@ -103,7 +103,7 @@ SDL_Texture *sdl_load_texture(SDL_Renderer *renderer, const char *file_path)
     }
 
     char *full_path = NULL;
-    printf("Loading texture from file: %s%s\n", SDL_GetBasePath(), file_path);
+    SDL_Log("Loading texture from file: %s%s\n", SDL_GetBasePath(), file_path);
     if (SDL_asprintf(&full_path, "%s%s", SDL_GetBasePath(), file_path) < 0)
     {
         SDL_Log("sdl_load_texture: SDL_asprintf failed");
