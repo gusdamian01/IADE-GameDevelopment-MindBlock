@@ -1,1 +1,0 @@
-tentativas.o: tentativas.c
